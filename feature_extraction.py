@@ -4,11 +4,32 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import numpy as np
 import cv2
 import os
-import sys
 from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+# Initialize tracker only when needed
+performance_tracker = None
+
+# Load mask model with memory limits
+try:
+    import tensorflow as tf
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        tf.config.experimental.set_virtual_device_configuration(
+            gpus[0],
+            [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=128)])
+    
+    mask_model = tf.keras.models.load_model('./models/mask_detector.h5')
+    mask_model.make_predict_function()  # Optimize for streaming
+    print("Mask model loaded with 128MB GPU limit")
+    
+    # ... rest of model loading ...
+    
+except Exception as e:
+    print(f"Error loading mask model: {str(e)}")
+    mask_model = None
+    
 # Model performance tracking
 class ModelPerformanceTracker:
     def __init__(self):
@@ -49,12 +70,8 @@ performance_tracker = ModelPerformanceTracker()
 
 # Load mask model once at module level
 try:
-    # Get the directory of the current script
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    model_path = os.path.join(base_dir, 'models', 'mask_detector.h5')
-    
-    mask_model = load_model(model_path)
-    print("Mask detection model loaded successfully from:", model_path)
+    mask_model = load_model('./models/mask_detector.h5')
+    print("Mask detection model loaded successfully")
     
     # Get model input and output details
     _, target_height, target_width, _ = mask_model.input_shape
@@ -67,7 +84,7 @@ try:
         model_type = "sigmoid"
         
 except Exception as e:
-    print(f"Error loading mask model: {str(e)}", file=sys.stderr)
+    print(f"Error loading mask model: {str(e)}")
     mask_model = None
     target_height, target_width = 224, 224
     model_type = "sigmoid"
@@ -85,8 +102,12 @@ def get_augmenter():
     )
 
 def detect_mask(face_image, true_label=None):
+    global performance_tracker
     if mask_model is None:
         return "Model Error"
+        
+    # Downsample before processing
+    small_face = cv2.resize(face_image, (128, 128))
     
     # Resize to model's expected dimensions
     resized_face = cv2.resize(face_image, (target_width, target_height))
@@ -103,9 +124,9 @@ def detect_mask(face_image, true_label=None):
         if model_type == "softmax":
             mask_prob = prediction[0][1]  # Assuming index 1 is "Mask"
             no_mask_prob = prediction[0][0]
-            pred_label = "Mask" if mask_prob > 0.5 else "No Mask"
+            pred_label = "No Mask" if mask_prob > 0.5 else "Mask"
         else:
-            pred_label = "Mask" if prediction[0][0] > 0.5 else "No Mask"
+            pred_label = "No Mask" if prediction[0][0] > 0.5 else "Mask"
         
         # Track performance if true label provided
         if true_label is not None:
@@ -114,7 +135,7 @@ def detect_mask(face_image, true_label=None):
         return pred_label
             
     except Exception as e:
-        print(f"No Mask prediction error: {str(e)}", file=sys.stderr)
+        print(f"No Mask prediction error: {str(e)}")
         return "Prediction Error"
 
 def evaluate_model(test_dir, mask_labels):

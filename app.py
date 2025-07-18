@@ -1,4 +1,4 @@
-# app.py - Optimized Version
+# app.py - Final Optimized Version
 import streamlit as st
 import cv2
 import tempfile
@@ -7,14 +7,17 @@ import shutil
 import subprocess
 import numpy as np
 from datetime import datetime
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Initialize session state
 if 'processing_done' not in st.session_state:
     st.session_state.processing_done = False
-    st.session_state.metrics = None
     st.session_state.start_time = None
     st.session_state.output_video_path = None
-    st.session_state.output_video_mp4 = None
 
 # Custom CSS for better styling
 st.markdown("""
@@ -36,7 +39,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Video2Video")
-st.write("Upload a video for comprehensive face analysis with real-time performance tracking")
+st.write("Upload a video for comprehensive face analysis")
 
 # ===== SIDEBAR =====
 st.sidebar.header("📊 Performance Dashboard")
@@ -64,28 +67,10 @@ with st.sidebar.expander("Mask Detection", expanded=True):
 # Processing Options
 st.sidebar.header("⚙️ Processing Options")
 with st.sidebar.form("settings_form"):
-    outfit_threshold = st.slider(
-        "Outfit Detection Threshold", 
-        1, 50, 20,
-        help="Lower values detect smaller outfit changes"
-    )
-    
     frame_skip = st.slider(
         "Frame Sampling Rate", 
         1, 100, 50,
         help="Process every Nth frame (higher=faster)"
-    )
-    
-    data_augmentation = st.checkbox(
-        "Enable Data Augmentation", 
-        value=True,
-        help="Improve detection robustness with transformations"
-    )
-    
-    enable_metrics = st.checkbox(
-        "Real-time Metrics", 
-        value=True,
-        help="Track model performance during processing"
     )
     
     submitted = st.form_submit_button("Apply Settings")
@@ -100,9 +85,6 @@ uploaded_file = st.file_uploader(
 # ===== PROCESSING FUNCTIONS =====
 def apply_augmentation(frame):
     """Lightweight augmentation"""
-    if not data_augmentation:
-        return frame
-
     try:
         # Only apply fast augmentations
         if np.random.rand() > 0.5:
@@ -112,8 +94,8 @@ def apply_augmentation(frame):
         alpha = np.random.uniform(0.9, 1.1)
         frame = cv2.convertScaleAbs(frame, alpha=alpha, beta=0)
         
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Augmentation error: {str(e)}")
         
     return frame
 
@@ -122,15 +104,10 @@ if uploaded_file and st.button("🚀 Process Video", type="primary"):
     # Initialize processing
     st.session_state.start_time = datetime.now()
     st.session_state.processing_done = False
-    st.session_state.metrics = {"accuracy": 0, "precision": 0, "recall": 0}
     st.session_state.output_video_path = None
-    st.session_state.output_video_mp4 = None
     
-    # Create output directories
-    for d in ["output", "output/masks"]:
-        if os.path.exists(d):
-            shutil.rmtree(d)
-        os.makedirs(d, exist_ok=True)
+    # Create output directory
+    os.makedirs("output", exist_ok=True)
     
     # Save video to temp file
     with st.spinner("Initializing..."):
@@ -142,6 +119,10 @@ if uploaded_file and st.button("🚀 Process Video", type="primary"):
     # Process video
     with st.spinner("Analyzing video..."):
         cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            st.error("Failed to open video file!")
+            st.stop()
+            
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         
@@ -153,7 +134,7 @@ if uploaded_file and st.button("🚀 Process Video", type="primary"):
         # Create video writer
         output_video_path = os.path.join("output", "annotated_video.avi")
         fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-        out = cv2.VideoWriter(output_video_path, fourcc, fps/2, dim)  # Half FPS
+        out = cv2.VideoWriter(output_video_path, fourcc, fps/2, dim)
         
         if not out.isOpened():
             st.error("Failed to initialize video writer!")
@@ -162,50 +143,60 @@ if uploaded_file and st.button("🚀 Process Video", type="primary"):
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        known_outfits = []
         frame_count = 0
+        processed_frame_count = 0
         
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
                 
+            frame_count += 1
             # Skip frames according to sampling rate
             if frame_count % frame_skip != 0:
-                frame_count += 1
                 continue
                 
-            # Downscale frame
-            small_frame = cv2.resize(frame, dim, interpolation=cv2.INTER_AREA)
+            processed_frame_count += 1
                 
-            # Apply augmentation
-            small_frame = apply_augmentation(small_frame)
-            
-            # Process frame
             try:
-                from image_processing import process_frame
-                annotated_frame, _ = process_frame(
-                    small_frame, 
-                    known_outfits,
-                    frame_index=frame_count,
-                    outfit_threshold=outfit_threshold
-                )
+                # Downscale frame
+                small_frame = cv2.resize(frame, dim, interpolation=cv2.INTER_AREA)
+                
+                # Apply augmentation
+                small_frame = apply_augmentation(small_frame)
+                
+                # Convert to RGB
+                rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+                
+                # Face detection (simplified)
+                gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
+                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+                faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+                
+                # Draw face rectangles
+                for (x, y, w, h) in faces:
+                    cv2.rectangle(rgb_frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
+                    label = "Face detected"
+                    cv2.putText(rgb_frame, label, (x, y-10), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                
+                # Write to video
+                out_frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
+                out.write(out_frame)
+                
+                # Update progress
+                progress = processed_frame_count / (total_frames // frame_skip)
+                progress_bar.progress(min(progress, 1.0))
+                status_text.text(f"Processed {processed_frame_count} frames")
+                
+                # Break early if processing too long
+                if (datetime.now() - st.session_state.start_time).seconds > 300:
+                    st.warning("Stopped early due to time limits")
+                    break
+                    
             except Exception as e:
-                annotated_frame = small_frame
-            
-            # Write to video
-            out.write(annotated_frame)
-            
-            # Update progress
-            progress = frame_count / (total_frames / frame_skip)
-            progress_bar.progress(min(progress, 1.0))
-            status_text.text(f"Processed {frame_count} frames")
-            frame_count += 1
-            
-            # Break early if processing too long
-            if (datetime.now() - st.session_state.start_time).seconds > 300:  # 5 min limit
-                st.warning("Stopped early due to time limits")
-                break
+                logger.error(f"Frame processing error: {str(e)}")
+                continue
         
         cap.release()
         out.release()
@@ -222,24 +213,19 @@ if uploaded_file and st.button("🚀 Process Video", type="primary"):
 # ===== RESULTS DISPLAY =====
 if st.session_state.processing_done:
     st.header("Results")
-    
-    # Only show video tab
-    tab1 = st.tabs(["Annotated Video"])[0]
-    
-    with tab1:
-        video_path = st.session_state.output_video_path
+    video_path = st.session_state.output_video_path
         
-        try:
-            with open(video_path, 'rb') as video_file:
-                video_bytes = video_file.read()
-            
-            st.video(video_bytes)
-            
-            st.download_button(
-                label="Download Video",
-                data=video_bytes,
-                file_name="annotated_video.avi",
-                mime="video/x-msvideo"
-            )
-        except Exception as e:
-            st.error(f"Video error: {str(e)}")
+    try:
+        with open(video_path, 'rb') as video_file:
+            video_bytes = video_file.read()
+        
+        st.video(video_bytes)
+        
+        st.download_button(
+            label="Download Video",
+            data=video_bytes,
+            file_name="annotated_video.avi",
+            mime="video/x-msvideo"
+        )
+    except Exception as e:
+        st.error(f"Video error: {str(e)}")

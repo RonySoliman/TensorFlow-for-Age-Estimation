@@ -9,6 +9,13 @@ import numpy as np
 from image_processing import process_frame
 from feature_extraction import get_performance_metrics, detect_mask
 from datetime import datetime
+import sys
+import warnings
+
+# Suppress TensorFlow warnings and informational messages
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # 0 = all, 1 = info, 2 = warnings, 3 = errors
+warnings.filterwarnings('ignore')
+
 
 # Initialize session state
 if 'processing_done' not in st.session_state:

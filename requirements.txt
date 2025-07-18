@@ -1,5 +1,5 @@
 opencv-python-headless==4.9.0.80
-tensorflow-cpu==2.16.1  # CPU-only version
+tensorflow>=2.16.2
 mediapipe==0.10.9
 scikit-learn==1.4.0
 numpy==1.26.0

@@ -2,7 +2,7 @@ import streamlit as st
 import re
 from datetime import datetime
 
-st.set_page_config(page_title="Surveillance Feedback Form", layout="centered")
+st.set_page_config(page_title= "نبض الخليج 💓",layout="centered")
 
 st.markdown("<h1 style='text-align: right;'>نبض الخليج 💓</h1>", unsafe_allow_html=True)
 st.markdown("Thank you for using our smart surveillance system. Please take a moment to give us your feedback.")

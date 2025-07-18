@@ -1,6 +1,11 @@
 import cv2
 import numpy as np
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+# Add this before loading the model
+import tensorflow as tf
+tf.get_logger().setLevel('ERROR')
 
 # Age buckets for classification
 AGE_BUCKETS = ["(0-15)", "(16-22)", "(23-29)", "(30-35)", "(36-42)", "(43-50)", "(51-64)", "(65-80)"]

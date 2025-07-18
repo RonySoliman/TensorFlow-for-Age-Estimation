@@ -20,7 +20,6 @@ if 'processing_done' not in st.session_state:
     st.session_state.output_video_path = None
     st.session_state.output_video_mp4 = None
 
-# REMOVED: st.session_state.annotated_frames - too memory heavy
 
 # ... custom CSS remains ...
 

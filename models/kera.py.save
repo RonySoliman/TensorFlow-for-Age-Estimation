@@ -1,0 +1,26 @@
+from tensorflow.keras.models import load_model
+import numpy as np
+import cv2
+import os
+
+# Load model
+MODEL_PATH = "age_model.h5"
+assert os.path.exists(MODEL_PATH), "Model file not found!"
+model = load_model(MODEL_PATH)
+print("Model loaded successfully.")
+
+# Load test image
+IMAGE_PATH = "test.jpg"  # Change this to your actual image
+assert os.path.exists(IMAGE_PATH), "Image file not found!"
+img = cv2.imread(IMAGE_PATH)
+img = cv2.resize(img, (224, 224))  # Make sure this matches model input
+img = img / 255.0
+img = np.expand_dims(img, axis=0)
+
+# Predict
+prediction = model.predict(img)
+print("Predicted output:", prediction)
+from tensorflow.keras.models import load_model
+
+age_model = load_model("age_model.h5")
+print("Model loaded successfully.")

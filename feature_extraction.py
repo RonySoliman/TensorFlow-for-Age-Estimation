@@ -4,6 +4,7 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import numpy as np
 import cv2
 import os
+import sys
 from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -48,8 +49,12 @@ performance_tracker = ModelPerformanceTracker()
 
 # Load mask model once at module level
 try:
-    mask_model = load_model('./models/mask_detector.h5')
-    print("Mask detection model loaded successfully")
+    # Get the directory of the current script
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(base_dir, 'models', 'mask_detector.h5')
+    
+    mask_model = load_model(model_path)
+    print("Mask detection model loaded successfully from:", model_path)
     
     # Get model input and output details
     _, target_height, target_width, _ = mask_model.input_shape
@@ -62,7 +67,7 @@ try:
         model_type = "sigmoid"
         
 except Exception as e:
-    print(f"Error loading mask model: {str(e)}")
+    print(f"Error loading mask model: {str(e)}", file=sys.stderr)
     mask_model = None
     target_height, target_width = 224, 224
     model_type = "sigmoid"
@@ -98,9 +103,9 @@ def detect_mask(face_image, true_label=None):
         if model_type == "softmax":
             mask_prob = prediction[0][1]  # Assuming index 1 is "Mask"
             no_mask_prob = prediction[0][0]
-            pred_label = "No Mask" if mask_prob > 0.5 else "Mask"
+            pred_label = "Mask" if mask_prob > 0.5 else "No Mask"
         else:
-            pred_label = "No Mask" if prediction[0][0] > 0.5 else "Mask"
+            pred_label = "Mask" if prediction[0][0] > 0.5 else "No Mask"
         
         # Track performance if true label provided
         if true_label is not None:
@@ -109,7 +114,7 @@ def detect_mask(face_image, true_label=None):
         return pred_label
             
     except Exception as e:
-        print(f"No Mask prediction error: {str(e)}")
+        print(f"No Mask prediction error: {str(e)}", file=sys.stderr)
         return "Prediction Error"
 
 def evaluate_model(test_dir, mask_labels):

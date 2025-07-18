@@ -1,7 +1,7 @@
 # image_processing.py
 import cv2
 import numpy as np
-from face_detection import detect_faces_from_image
+from face_detectionn import detect_faces_from_image
 from feature_extraction import detect_mask
 from age_estimation import estimate_age
 

@@ -2,10 +2,7 @@ import cv2
 import numpy as np
 import os
 
-# Age buckets for classification
-AGE_BUCKETS = ["(0-15)", "(16-22)", "(23-29)", "(30-35)", "(36-42)", "(43-50)", "(51-64)", "(65-80)"]
-
-# Initialize age model
+# Global model with lazy loading
 age_net = None
 
 def load_age_model():
@@ -14,45 +11,39 @@ def load_age_model():
         return
     
     try:
-        # Use relative path that works with your structure
-        prototxt = "./models/deploy_age.prototxt"  # Note the filename change
+        prototxt = "./models/deploy_age.prototxt"
         caffemodel = "./models/age_net.caffemodel"
         
-        # Check if files exist
-        if not os.path.exists(prototxt):
-            raise FileNotFoundError(f"Prototxt file not found: {prototxt}")
-        if not os.path.exists(caffemodel):
-            raise FileNotFoundError(f"Model file not found: {caffemodel}")
+        # Verify model exists
+        if not all(os.path.exists(p) for p in [prototxt, caffemodel]):
+            raise FileNotFoundError("Model files missing")
             
         age_net = cv2.dnn.readNet(prototxt, caffemodel)
-        print("Age model loaded successfully")
+        print("Age model loaded")
     except Exception as e:
-        print(f"Error loading age model: {str(e)}")
+        print(f"Age model error: {str(e)}")
         age_net = None
 
 def estimate_age(face_img):
     if age_net is None:
         load_age_model()
         if age_net is None:
-            return "Age Model Error"
+            return "N/A"
     
     try:
-        # Preprocess face for age model - UPDATED MEAN VALUES
+        # Use smaller input size
         blob = cv2.dnn.blobFromImage(
             face_img, 
             scalefactor=1.0,
-            size=(227, 227),
+            size=(150, 150),  # Reduced from 227
             mean=(78.4263377603, 87.7689143744, 114.895847746),
-            swapRB=False  # OpenCV uses BGR by default
+            swapRB=False
         )
         
-        # Make prediction
         age_net.setInput(blob)
         preds = age_net.forward()
-        i = preds[0].argmax()
-        age = AGE_BUCKETS[i]
-        return age
+        return ["(0-15)", "(16-22)", "(23-29)", "(30-35)", 
+                "(36-42)", "(43-50)", "(51-64)", "(65-80)"][preds[0].argmax()]
         
-    except Exception as e:
-        print(f"Age estimation error: {str(e)}")
-        return "Age Error"
+    except Exception:
+        return "N/A"

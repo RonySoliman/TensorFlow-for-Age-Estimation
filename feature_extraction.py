@@ -8,28 +8,6 @@ from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-# Initialize tracker only when needed
-performance_tracker = None
-
-# Load mask model with memory limits
-try:
-    import tensorflow as tf
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if gpus:
-        tf.config.experimental.set_virtual_device_configuration(
-            gpus[0],
-            [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=128)])
-    
-    mask_model = tf.keras.models.load_model('./models/mask_detector.h5')
-    mask_model.make_predict_function()  # Optimize for streaming
-    print("Mask model loaded with 128MB GPU limit")
-    
-    # ... rest of model loading ...
-    
-except Exception as e:
-    print(f"Error loading mask model: {str(e)}")
-    mask_model = None
-    
 # Model performance tracking
 class ModelPerformanceTracker:
     def __init__(self):
@@ -102,12 +80,8 @@ def get_augmenter():
     )
 
 def detect_mask(face_image, true_label=None):
-    global performance_tracker
     if mask_model is None:
         return "Model Error"
-        
-    # Downsample before processing
-    small_face = cv2.resize(face_image, (128, 128))
     
     # Resize to model's expected dimensions
     resized_face = cv2.resize(face_image, (target_width, target_height))

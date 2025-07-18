@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
 
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Model performance tracking
 class ModelPerformanceTracker:
@@ -55,12 +57,23 @@ performance_tracker = ModelPerformanceTracker()
 
 # Load mask model once at module level
 try:
-    # Get the directory of the current script
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    model_path = os.path.join(base_dir, 'models', 'mask_detector.h5')
+    # Create models directory if it doesn't exist
+    models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
+    os.makedirs(models_dir, exist_ok=True)
     
+    # Check if model file exists
+    model_path = os.path.join(models_dir, 'mask_detector.h5')
+    
+    if not os.path.exists(model_path):
+        # Try to download the model if it doesn't exist
+        import gdown
+        logging.info("Model not found locally, downloading...")
+        url = 'https://drive.google.com/uc?id=1qJcXGkXr0b2HtN5nY2-8V2K3p2X2Zv7J'
+        gdown.download(url, model_path, quiet=False)
+    
+    # Load the model
     mask_model = load_model(model_path)
-    print("Mask detection model loaded successfully from:", model_path)
+    logging.info(f"Mask detection model loaded successfully from: {model_path}")
     
     # Get model input and output details
     _, target_height, target_width, _ = mask_model.input_shape
@@ -73,7 +86,8 @@ try:
         model_type = "sigmoid"
         
 except Exception as e:
-    print(f"Error loading mask model: {str(e)}", file=sys.stderr)
+    logging.error(f"Error loading mask model: {str(e)}")
+    # Fallback to a simple threshold-based method
     mask_model = None
     target_height, target_width = 224, 224
     model_type = "sigmoid"
@@ -92,7 +106,32 @@ def get_augmenter():
 
 def detect_mask(face_image, true_label=None):
     if mask_model is None:
-        return "Model Error"
+        # Fallback method using simple color analysis
+        try:
+            # Convert to HSV color space
+            hsv = cv2.cvtColor(face_image, cv2.COLOR_RGB2HSV)
+            
+            # Define lower and upper bounds for skin color
+            lower_skin = np.array([0, 20, 70], dtype=np.uint8)
+            upper_skin = np.array([20, 255, 255], dtype=np.uint8)
+            
+            # Create mask for skin regions
+            mask = cv2.inRange(hsv, lower_skin, upper_skin)
+            
+            # Calculate percentage of skin pixels
+            skin_ratio = np.sum(mask > 0) / (face_image.shape[0] * face_image.shape[1])
+            
+            # If more than 30% of face is skin, assume no mask
+            pred_label = "No Mask" if skin_ratio > 0.3 else "Mask"
+            
+            # Track performance if true label provided
+            if true_label is not None:
+                performance_tracker.add_prediction(true_label, pred_label)
+                
+            return pred_label
+        except Exception as e:
+            logging.error(f"Fallback mask detection failed: {str(e)}")
+            return "Prediction Error"
     
     # Resize to model's expected dimensions
     resized_face = cv2.resize(face_image, (target_width, target_height))
@@ -108,7 +147,6 @@ def detect_mask(face_image, true_label=None):
         # Interpret prediction based on model type
         if model_type == "softmax":
             mask_prob = prediction[0][1]  # Assuming index 1 is "Mask"
-            no_mask_prob = prediction[0][0]
             pred_label = "Mask" if mask_prob > 0.5 else "No Mask"
         else:
             pred_label = "Mask" if prediction[0][0] > 0.5 else "No Mask"
@@ -120,7 +158,7 @@ def detect_mask(face_image, true_label=None):
         return pred_label
             
     except Exception as e:
-        print(f"No Mask prediction error: {str(e)}", file=sys.stderr)
+        logging.error(f"Mask prediction error: {str(e)}")
         return "Prediction Error"
 
 def evaluate_model(test_dir, mask_labels):

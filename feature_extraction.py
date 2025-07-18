@@ -4,10 +4,16 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import numpy as np
 import cv2
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow logging
 import sys
 from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+# Add this before loading any models
+import tensorflow as tf
+tf.get_logger().setLevel('ERROR')
+
 
 # Model performance tracking
 class ModelPerformanceTracker:
